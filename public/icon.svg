@@ -1,0 +1,15 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #E10600; }
+      .fg { fill: white; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #E10600; }
+      .fg { fill: white; }
+    }
+  </style>
+  <rect class="bg" width="180" height="180" rx="36"/>
+  <!-- Stylized "K" for Kart - bold and readable at small sizes -->
+  <path class="fg" d="M55 50 L55 130 L70 130 L70 95 L115 130 L135 130 L90 85 L135 50 L112 50 L70 78 L70 50 Z" stroke="none"/>
+</svg>
