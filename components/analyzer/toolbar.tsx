@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useAnalyzer } from "@/lib/analyzer-context";
 import { signout } from "@/app/auth/actions";
@@ -21,37 +21,25 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
     cancelAnalysis,
     setInterval,
     setThumbSize,
-    importJSON,
-    exportJSON,
-    exportRaces,
     saveToSupabase,
     fetchSessions,
     loadSession,
     newSession,
+    deleteSession,
   } = useAnalyzer();
 
   useEffect(() => {
     if (userEmail) fetchSessions();
   }, [userEmail, fetchSessions]);
 
-  const vidInputRef = useRef<HTMLInputElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
-
   const canAnalyze = videoLoaded && !analyzing;
   const hasFrames = frames.length > 0;
 
   return (
     <header className="toolbar" role="toolbar" aria-label="Analyzer controls">
-      <h1>Mario Kart Analyzer</h1>
-      {userEmail && (
-        <Link
-          href="/"
-          className="btn btn-secondary btn-sm"
-          style={{ textDecoration: "none" }}
-        >
-          Home
-        </Link>
-      )}
+      <Link href="/" className="toolbar-logo" aria-label="Home">
+        Kart Vision
+      </Link>
       <Link
         href="/how-it-works"
         className="btn btn-secondary btn-sm"
@@ -80,13 +68,15 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
               </option>
             ))}
           </select>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={newSession}
-            aria-label="Start new session"
-          >
-            New Session
-          </button>
+          {currentSessionId && (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => deleteSession(currentSessionId)}
+              aria-label="Delete current session"
+            >
+              Delete Session
+            </button>
+          )}
         </div>
       )}
 
@@ -94,7 +84,6 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
         <label className="btn btn-primary btn-sm" tabIndex={0} role="button">
           <span>{videoLoaded ? "Change Video" : "Load Video"}</span>
           <input
-            ref={vidInputRef}
             type="file"
             accept="video/*"
             className="sr-only"
@@ -169,37 +158,8 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
           paddingLeft: "0.6rem",
         }}
         role="group"
-        aria-label="Import/Export"
+        aria-label="Session actions"
       >
-        <label className="btn btn-secondary btn-sm" tabIndex={0} role="button">
-          Import JSON
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".json"
-            className="sr-only"
-            aria-label="Import JSON file"
-            onChange={(e) => {
-              if (e.target.files?.[0]) importJSON(e.target.files[0]);
-            }}
-          />
-        </label>
-        <button
-          className="btn btn-success btn-sm"
-          disabled={!hasFrames}
-          onClick={exportJSON}
-          aria-label="Export frame annotations as JSON"
-        >
-          Export JSON
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          disabled={!hasFrames}
-          onClick={exportRaces}
-          aria-label="Export race data as JSON"
-        >
-          Export Races
-        </button>
         {userEmail && (
           <button
             className="btn btn-primary btn-sm"

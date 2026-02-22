@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Mario Kart Analyzer',
+  title: 'Kart Vision',
   description: 'Analyze Mario Kart gameplay footage with AI-powered frame analysis',
   generator: 'v0.app',
   icons: {

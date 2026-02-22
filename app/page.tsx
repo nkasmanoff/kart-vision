@@ -1,10 +1,17 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
+import { deleteSessionAction } from "./actions"
 import "./landing.css"
 
 export default async function LandingPage() {
   let user = null
-  let sessions: { id: string; video_name: string; created_at: string }[] = []
+  let sessionsWithThumbs: {
+    id: string
+    video_name: string
+    created_at: string
+    thumbUrl: string | null
+  }[] = []
+
   try {
     const supabase = await createClient()
     const { data } = await supabase.auth.getUser()
@@ -12,14 +19,40 @@ export default async function LandingPage() {
     if (user) {
       const { data: sessionsData } = await supabase
         .from("analysis_sessions")
-        .select("id, video_name, created_at")
+        .select("id, video_name, created_at, frame_annotations")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-      sessions = (sessionsData ?? []).map((r) => ({
-        id: r.id,
-        video_name: r.video_name || "Untitled",
-        created_at: r.created_at,
-      }))
+
+      const userId = user.id
+      sessionsWithThumbs = await Promise.all(
+        (sessionsData ?? []).map(async (r) => {
+          const annotations = r.frame_annotations as {
+            frames?: { timestamp: number }[]
+          } | null
+          const frameCount = annotations?.frames?.length ?? 0
+          const midIdx = Math.floor(frameCount / 2)
+          let thumbUrl: string | null = null
+          if (frameCount > 0) {
+            try {
+              const { data: signedData } = await supabase.storage
+                .from("frame-images")
+                .createSignedUrl(
+                  `${userId}/${r.id}/${midIdx}_thumb.jpg`,
+                  3600
+                )
+              thumbUrl = signedData?.signedUrl ?? null
+            } catch {
+              // No image available for this session
+            }
+          }
+          return {
+            id: r.id,
+            video_name: r.video_name || "Untitled",
+            created_at: r.created_at,
+            thumbUrl,
+          }
+        })
+      )
     }
   } catch {
     // Supabase not configured yet - show landing page anyway
@@ -29,17 +62,13 @@ export default async function LandingPage() {
     <div className="landing">
       <nav className="landing-nav" aria-label="Main navigation">
         <Link href="/" className="landing-nav-logo">
-          Mario Kart Analyzer
+          Kart Vision
         </Link>
         <div className="landing-nav-links">
           <Link href="/how-it-works" className="landing-nav-link">
             How It Works
           </Link>
-          {user ? (
-            <Link href="/analyzer" className="landing-nav-cta">
-              Open Analyzer
-            </Link>
-          ) : (
+          {!user && (
             <>
               <Link href="/auth/login" className="landing-nav-link">
                 Log In
@@ -70,24 +99,45 @@ export default async function LandingPage() {
                 </span>
                 <span className="landing-session-card-label">Add new</span>
               </Link>
-              {sessions.map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/analyzer?session=${s.id}`}
-                  className="landing-session-card"
-                >
-                  <span className="landing-session-card-name">
-                    {s.video_name}
-                  </span>
-                  <span className="landing-session-card-date">
-                    {new Date(s.created_at).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                      timeZone: "UTC",
-                    })}
-                  </span>
-                </Link>
+              {sessionsWithThumbs.map((s) => (
+                <div key={s.id} className="landing-session-card-wrapper">
+                  <Link
+                    href={`/analyzer?session=${s.id}`}
+                    className="landing-session-card"
+                  >
+                    {s.thumbUrl ? (
+                      <img
+                        src={s.thumbUrl}
+                        className="landing-session-card-thumb"
+                        alt=""
+                      />
+                    ) : (
+                      <div className="landing-session-card-thumb landing-session-card-thumb--empty" aria-hidden="true" />
+                    )}
+                    <span className="landing-session-card-name">
+                      {s.video_name}
+                    </span>
+                    <span className="landing-session-card-date">
+                      {new Date(s.created_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                        timeZone: "UTC",
+                      })}
+                    </span>
+                  </Link>
+                  <form action={deleteSessionAction}>
+                    <input type="hidden" name="sessionId" value={s.id} />
+                    <button
+                      type="submit"
+                      className="landing-session-card-delete"
+                      aria-label={`Delete session ${s.video_name}`}
+                      title="Delete session"
+                    >
+                      ×
+                    </button>
+                  </form>
+                </div>
               ))}
             </div>
           </section>
@@ -97,8 +147,8 @@ export default async function LandingPage() {
               Powered by Moondream AI
             </div>
             <h1>
-              Analyze your Mario Kart{" "}
-              <span className="accent">gameplay footage</span>
+              Analyze your{" "}
+              <span className="accent">kart gameplay footage</span>
             </h1>
             <p>
               Load a video, let AI extract frames, classify scenes, read
@@ -153,13 +203,13 @@ export default async function LandingPage() {
               className="landing-feature-icon landing-feature-icon--blue"
               aria-hidden="true"
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
             </div>
-            <h3>Import / Export</h3>
+            <h3>Session Storage</h3>
             <p>
-              Export frame annotations and race data as JSON. Import previous
-              sessions to continue labeling or re-analyze with different AI
-              models and parameters.
+              All sessions and frame images are saved to the cloud. Pick up
+              exactly where you left off and explore your analysis on any
+              device.
             </p>
           </div>
         </section>
@@ -205,7 +255,7 @@ export default async function LandingPage() {
       </main>
 
       <footer className="landing-footer">
-        <p>Mario Kart Analyzer -- built with Next.js, Supabase, and Moondream AI</p>
+        <p>Kart Vision -- built with Next.js, Supabase, and Moondream AI</p>
       </footer>
     </div>
   )

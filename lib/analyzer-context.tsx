@@ -182,13 +182,11 @@ interface AnalyzerActions {
   setThumbSize: (size: number) => void;
   setInterval: (val: number) => void;
   setFocusIdx: (idx: number) => void;
-  importJSON: (file: File) => void;
-  exportJSON: () => void;
-  exportRaces: () => void;
   saveToSupabase: () => Promise<void>;
   fetchSessions: () => Promise<void>;
   loadSession: (id: string) => Promise<void>;
   newSession: () => void;
+  deleteSession: (id: string) => Promise<void>;
   getConsensus: () => {
     scene: FrameLabels["scene"] | undefined;
     position: FrameLabels["position"] | undefined;
@@ -300,11 +298,15 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       const updated = [...framesRef.current];
       selection.forEach((idx) => {
         if (key === "events") return;
-        (updated[idx].labels as Record<string, unknown>)[key] = value;
+        (updated[idx].labels as unknown as Record<string, unknown>)[key] = value;
       });
-      updateFrames(updated);
+      imputeScene(updated);
+      const newRaces = segmentRaces(updated);
+      framesRef.current = updated;
+      setFrames([...updated]);
+      setRaces(newRaces);
     },
-    [selection, updateFrames]
+    [selection]
   );
 
   const toggleEvent = useCallback(
@@ -329,9 +331,13 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
           }
         }
       });
-      updateFrames(updated);
+      imputeScene(updated);
+      const newRaces = segmentRaces(updated);
+      framesRef.current = updated;
+      setFrames([...updated]);
+      setRaces(newRaces);
     },
-    [selection, updateFrames]
+    [selection]
   );
 
   const clearSelectedLabels = useCallback(() => {
@@ -340,9 +346,13 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     selection.forEach((idx) => {
       updated[idx].labels = defaultLabels();
     });
-    updateFrames(updated);
+    imputeScene(updated);
+    const newRaces = segmentRaces(updated);
+    framesRef.current = updated;
+    setFrames([...updated]);
+    setRaces(newRaces);
     toast("Cleared labels for selected frames");
-  }, [selection, updateFrames]);
+  }, [selection]);
 
   const goNextUnlabeled = useCallback(() => {
     const f = framesRef.current;
@@ -567,241 +577,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     toast.success(`Re-analysis complete: ${newRaces.length} race(s)`);
   }, []);
 
-  const importJSON = useCallback(
-    (file: File) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        try {
-          const data = JSON.parse(ev.target!.result as string);
-          let imported = false;
-
-          if (
-            data.type === "frame_annotations" &&
-            Array.isArray(data.frames)
-          ) {
-            const newFrames: Frame[] = data.frames.map(
-              (f: Record<string, unknown>) => ({
-                timestamp: f.timestamp as number,
-                dataUrl: "",
-                hiResUrl: "",
-                labels: {
-                  scene: (f.scene as string) ?? null,
-                  position: (f.position as number) ?? null,
-                  coins: (f.coins as number) ?? null,
-                  events: (f.events as string[]) || [],
-                },
-              })
-            );
-            framesRef.current = newFrames;
-            setFrames(newFrames);
-            imported = true;
-          } else if (
-            Array.isArray(data) &&
-            data.length > 0 &&
-            "timestamp" in data[0] &&
-            "scene" in data[0]
-          ) {
-            const newFrames: Frame[] = data.map(
-              (f: Record<string, unknown>) => ({
-                timestamp: f.timestamp as number,
-                dataUrl: "",
-                hiResUrl: "",
-                labels: {
-                  scene: (f.scene as string) ?? null,
-                  position: (f.position as number) ?? null,
-                  coins: (f.coins as number) ?? null,
-                  events: (f.events as string[]) || [],
-                },
-              })
-            );
-            framesRef.current = newFrames;
-            setFrames(newFrames);
-            imported = true;
-          }
-
-          if (imported) {
-            const f = framesRef.current;
-            imputeScene(f);
-            const newRaces = segmentRaces(f);
-            setFrames([...f]);
-            setRaces(newRaces);
-            setStatusMessage(
-              `Imported ${f.length} frames, ${newRaces.length} race(s)`
-            );
-            setActiveTab("dashboard");
-            toast.success(
-              `Imported ${f.length} frames with ${newRaces.length} race(s)`
-            );
-          } else {
-            toast.error("Unrecognized JSON format.");
-          }
-        } catch (err) {
-          toast.error(
-            "Failed to parse JSON: " + (err as Error).message
-          );
-        }
-      };
-      reader.readAsText(file);
-    },
-    []
-  );
-
-  const downloadJSON = useCallback(
-    (data: unknown, filename: string) => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
-      });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    },
-    []
-  );
-
-  const exportJSON = useCallback(() => {
-    const f = framesRef.current;
-    if (f.length === 0) return;
-    downloadJSON(
-      {
-        type: "frame_annotations",
-        sample_interval: interval,
-        total_frames: f.length,
-        labeled_frames: f.filter((fr) => isLabeled(fr.labels)).length,
-        frames: f.map((fr) => ({
-          timestamp: fr.timestamp,
-          scene: fr.labels.scene,
-          position: fr.labels.position,
-          coins: fr.labels.coins,
-          events: fr.labels.events,
-        })),
-      },
-      "analyzer_results.json"
-    );
-    toast.success("Exported frame annotations");
-  }, [interval, downloadJSON]);
-
-  const exportRaces = useCallback(() => {
-    const f = framesRef.current;
-    if (f.length === 0) return;
-    const out: Record<string, unknown>[] = [];
-    let current: Record<string, unknown> | null = null;
-    let prevPos: number | null = null;
-    let raceCount = 0;
-    for (let i = 0; i < f.length; i++) {
-      const fr = f[i],
-        l = fr.labels,
-        ts = fr.timestamp;
-      if (l.scene === "in_race" && !current) {
-        raceCount++;
-        current = {
-          race_number: raceCount,
-          start_time: ts,
-          end_time: null,
-          final_position: null,
-          best_position: null,
-          worst_position: null,
-          position_history: [],
-          coin_history: [],
-          events: [
-            { timestamp: ts, event_type: "race_start", details: {} },
-          ],
-        };
-        prevPos = null;
-      }
-      if (current && l.scene === "in_race") {
-        if (l.position !== null && l.position !== "x") {
-          const pos = l.position as number;
-          if (prevPos !== null && prevPos !== pos) {
-            (current.events as Record<string, unknown>[]).push({
-              timestamp: ts,
-              event_type: "position_change",
-              details: { from: prevPos, to: pos },
-            });
-          }
-          (
-            current.position_history as Record<string, unknown>[]
-          ).push({
-            timestamp: ts,
-            position: pos,
-            relative_time: ts - (current.start_time as number),
-          });
-          prevPos = pos;
-        }
-        if (l.coins !== null)
-          (current.coin_history as Record<string, unknown>[]).push({
-            timestamp: ts,
-            relative_time: ts - (current.start_time as number),
-            coins: l.coins,
-          });
-        if (l.events)
-          l.events.forEach((ev) =>
-            (current!.events as Record<string, unknown>[]).push({
-              timestamp: ts,
-              event_type: ev,
-              details: {},
-            })
-          );
-      }
-      if (current && l.scene !== "in_race") {
-        current.end_time = f[Math.max(0, i - 1)].timestamp;
-        (current.events as Record<string, unknown>[]).push({
-          timestamp: current.end_time,
-          event_type: "race_end",
-          details: {},
-        });
-        const positions = (
-          current.position_history as { position: number }[]
-        ).map((p) => p.position);
-        const cv = (current.coin_history as { coins: number }[]).map(
-          (c) => c.coins
-        );
-        if (positions.length) {
-          current.final_position = positions[positions.length - 1];
-          current.best_position = Math.min(...positions);
-          current.worst_position = Math.max(...positions);
-        }
-        if (cv.length) {
-          current.final_coins = cv[cv.length - 1];
-          current.max_coins = Math.max(...cv);
-          current.min_coins = Math.min(...cv);
-        }
-        (current.events as Record<string, unknown>[]).sort(
-          (a, b) => (a.timestamp as number) - (b.timestamp as number)
-        );
-        out.push(current);
-        current = null;
-        prevPos = null;
-      }
-    }
-    if (current) {
-      current.end_time = f[f.length - 1].timestamp;
-      const positions = (
-        current.position_history as { position: number }[]
-      ).map((p) => p.position);
-      const cv = (current.coin_history as { coins: number }[]).map(
-        (c) => c.coins
-      );
-      if (positions.length) {
-        current.final_position = positions[positions.length - 1];
-        current.best_position = Math.min(...positions);
-        current.worst_position = Math.max(...positions);
-      }
-      if (cv.length) {
-        current.final_coins = cv[cv.length - 1];
-        current.max_coins = Math.max(...cv);
-        current.min_coins = Math.min(...cv);
-      }
-      (current.events as Record<string, unknown>[]).sort(
-        (a, b) => (a.timestamp as number) - (b.timestamp as number)
-      );
-      out.push(current);
-    }
-    downloadJSON(out, "annotated_races.json");
-    toast.success("Exported race data");
-  }, [downloadJSON]);
-
   const saveToSupabase = useCallback(async () => {
     const f = framesRef.current;
     if (f.length === 0) {
@@ -1016,6 +791,50 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     toast.success("New session");
   }, [currentSessionId]);
 
+  const deleteSession = useCallback(async (id: string) => {
+    if (!window.confirm("Delete this session? This cannot be undone.")) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("analysis_sessions")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      toast.error("Failed to delete session");
+      return;
+    }
+
+    const { data: files } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .list(`${user.id}/${id}`);
+    if (files && files.length > 0) {
+      const paths = files.map((f) => `${user.id}/${id}/${f.name}`);
+      await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+    }
+
+    if (id === currentSessionId) {
+      setFrames([]);
+      setRaces([]);
+      setSelectionState(new Set());
+      setFocusIdx(-1);
+      setLastClickIdx(-1);
+      setVideoLoaded(false);
+      setVideoName("");
+      setVideoDuration(0);
+      setStatusMessage("No video loaded");
+      setCurrentSessionId(null);
+      framesRef.current = [];
+      if (videoRef.current) videoRef.current.src = "";
+    }
+
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    toast.success("Session deleted");
+  }, [currentSessionId]);
+
   const getConsensus = useCallback(() => {
     let scene: FrameLabels["scene"] | undefined = undefined;
     let position: FrameLabels["position"] | undefined = undefined;
@@ -1118,13 +937,11 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setThumbSize,
         setInterval: setIntervalVal,
         setFocusIdx,
-        importJSON,
-        exportJSON,
-        exportRaces,
         saveToSupabase,
         fetchSessions,
         loadSession,
         newSession,
+        deleteSession,
         getConsensus,
         videoRef,
         getStats,

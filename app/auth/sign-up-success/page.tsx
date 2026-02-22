@@ -6,7 +6,7 @@ export default function SignUpSuccessPage() {
       <div className="auth-card">
         <div className="auth-header">
           <Link href="/" className="auth-logo">
-            Mario Kart Analyzer
+            Kart Vision
           </Link>
           <h1 className="auth-title">Check your email</h1>
           <p className="auth-subtitle">

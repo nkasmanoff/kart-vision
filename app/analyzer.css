@@ -1,4 +1,4 @@
-/* Mario Kart Analyzer Styles */
+/* Kart Vision Styles */
 * { box-sizing: border-box; }
 
 :root {
@@ -49,6 +49,21 @@
   -webkit-text-fill-color: transparent;
   margin-right: auto;
   white-space: nowrap;
+}
+.toolbar-logo {
+  font-size: 1.05rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-right: auto;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.toolbar-logo:hover {
+  opacity: 0.8;
 }
 .tb-group {
   display: flex;
@@ -136,6 +151,13 @@
 }
 .btn-warning:hover {
   box-shadow: 0 3px 12px rgba(255, 136, 68, 0.4);
+}
+.btn-danger {
+  background: linear-gradient(135deg, #e94560, #b02040);
+  color: #fff;
+}
+.btn-danger:hover {
+  box-shadow: 0 3px 12px rgba(233, 69, 96, 0.5);
 }
 .btn-sm {
   padding: 0.25rem 0.6rem;

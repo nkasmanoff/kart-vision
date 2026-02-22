@@ -2,16 +2,16 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "How It Works - Mario Kart Analyzer",
+  title: "How It Works - Kart Vision",
   description:
-    "Learn how the Mario Kart Analyzer uses AI-powered frame analysis to extract race data from gameplay footage.",
+    "Learn how Kart Vision uses AI-powered frame analysis to extract race data from gameplay footage.",
 };
 
 const steps = [
   {
     num: "01",
     title: "Load Your Video",
-    desc: "Select any Mario Kart gameplay video from your device. The analyzer supports all common video formats. The video is processed entirely in your browser \u2014 nothing is uploaded to a server.",
+    desc: "Select any Mario Kart gameplay video from your device. Kart Vision supports all common video formats. The video is processed entirely in your browser \u2014 nothing is uploaded to a server.",
     detail:
       "The video element seeks through the file at your configured interval (default: every 1 second) and captures frames using an HTML5 canvas.",
     color: "var(--mk-accent)",
@@ -29,7 +29,7 @@ const steps = [
     title: "AI Scene Classification",
     desc: 'The Moondream vision model examines each frame and determines whether it shows an active race. Frames are tagged as "In Race" or "Not In Race" to filter menus, lobbies, and load screens.',
     detail:
-      'A fine-tuned model variant can be configured for improved accuracy. The model answers: "Is this an active Mario Kart race?" with yes, no, or unsure.',
+      'A fine-tuned model variant can be configured for improved accuracy. The model answers: "Is this an active kart race?" with yes, no, or unsure.',
     color: "var(--mk-blue)",
   },
   {
@@ -59,9 +59,9 @@ const steps = [
   {
     num: "07",
     title: "Dashboard & Export",
-    desc: "View rich analytics per race: position over time, coin history, best/worst/final placement, and session-wide summaries. Export everything as JSON for further analysis.",
+    desc: "View rich analytics per race: position over time, coin history, best/worst/final placement, and session-wide summaries. Sessions are saved to the cloud for access any time.",
     detail:
-      "Two export formats are available: raw frame annotations (for re-import and correction) and structured race data (for external tools and spreadsheets).",
+      "All session data and frame images are persisted to Supabase so you can pick up exactly where you left off.",
     color: "var(--mk-gold)",
   },
 ];
@@ -104,7 +104,7 @@ export default function HowItWorksPage() {
           </svg>
           Back to Analyzer
         </Link>
-        <h1 className="hiw-nav-title">Mario Kart Analyzer</h1>
+        <h1 className="hiw-nav-title">Kart Vision</h1>
       </nav>
 
       <main className="hiw-main">
@@ -113,9 +113,9 @@ export default function HowItWorksPage() {
           <p className="hiw-eyebrow">Documentation</p>
           <h1 className="hiw-heading">How It Works</h1>
           <p className="hiw-subheading">
-            The Mario Kart Analyzer uses the Moondream vision model to extract
-            race data from gameplay footage. Here is the full pipeline, from
-            video to dashboard.
+            Kart Vision uses the Moondream vision model to extract race data
+            from gameplay footage. Here is the full pipeline, from video to
+            dashboard.
           </p>
         </header>
 
