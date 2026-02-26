@@ -2,8 +2,9 @@ import type { Frame, RaceData } from "./analyzer-types";
 
 // ── Moondream API (proxied through /api/moondream to avoid CORS + keep key server-side) ──
 const PROXY_URL = "/api/moondream";
+const SCENE_PROXY_URL = "/api/scene";
 const SCENE_QUESTION =
-  "Is this an active mario kart race? Response yes no or unsure";
+  "Is this an active mario kart race? Respond yes, no, or unsure.";
 const POSITION_QUESTION =
   "What position number (1-24) is shown? Respond with just the number or n/a if nothing is shown.";
 const COINS_QUESTION =
@@ -121,6 +122,52 @@ export async function queryMoondream(
     } catch (e) {
       if (attempt < 4) {
         await sleep(Math.pow(2, attempt) * 1000);
+        continue;
+      }
+      throw e;
+    }
+  }
+  return "";
+}
+
+/**
+ * Call the Modal-hosted fine-tuned scene detector.
+ * Expects a data-URL or plain base64 string; strips the data-URL prefix if present.
+ */
+export async function queryModalScene(imageDataUrl: string): Promise<string> {
+  const base64 = imageDataUrl.includes(",")
+    ? imageDataUrl.split(",")[1]
+    : imageDataUrl;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const resp = await fetch(SCENE_PROXY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64 }),
+      });
+      if (resp.status === 429 || resp.status === 503) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(
+          `[Modal Scene] ${resp.status}, retrying in ${wait}ms...`
+        );
+        await sleep(wait);
+        continue;
+      }
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(`Scene API ${resp.status}: ${errBody}`);
+      }
+      const data = await resp.json();
+      return data.answer ?? "";
+    } catch (e) {
+      if (attempt < 4) {
+        const wait = Math.pow(2, attempt) * 1000;
+        console.warn(
+          `[Modal Scene] Error (attempt ${attempt + 1}/5), retrying in ${wait}ms:`,
+          e
+        );
+        await sleep(wait);
         continue;
       }
       throw e;

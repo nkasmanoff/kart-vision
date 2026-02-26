@@ -12,6 +12,7 @@ import type { Frame, FrameLabels, RaceData } from "./analyzer-types";
 import { defaultLabels, isLabeled, EVENT_TYPES } from "./analyzer-types";
 import {
   queryMoondream,
+  queryModalScene,
   parseScene,
   parsePosition,
   parseCoins,
@@ -162,9 +163,7 @@ interface AnalyzerState {
   currentSessionId: string | null;
 }
 
-const getFinetuneId = () => process.env.NEXT_PUBLIC_MOONDREAM_FINETUNE_ID ?? "";
-const getSceneModelName = () => process.env.NEXT_PUBLIC_MOONDREAM_MODEL ?? "moondream3-preview";
-const getSceneStep = () => process.env.NEXT_PUBLIC_MOONDREAM_STEP ?? "40";
+
 
 interface AnalyzerActions {
   loadVideo: (file: File) => void;
@@ -236,10 +235,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
   const [interval, setIntervalVal] = useState(1.0);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const sceneModelName = getSceneModelName();
-  const sceneFinetuneId = getFinetuneId();
-  const sceneStep = getSceneStep();
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cancelRef = useRef(false);
   const framesRef = useRef<Frame[]>([]);
@@ -385,18 +380,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     setProgress(0);
 
     const vid = videoRef.current;
-    // Combine model/finetuneId@step
-    const modelBase = sceneModelName.trim();
-    const ftId = sceneFinetuneId.trim();
-    const step = sceneStep.trim();
-    let scModel: string | null = null;
-    if (modelBase) {
-      scModel = modelBase;
-      if (ftId) {
-        scModel += `/${ftId}`;
-        if (step) scModel += `@${step}`;
-      }
-    }
     const intv = interval;
     const duration = vid.duration;
     const totalFrames = Math.ceil(duration / intv);
@@ -436,20 +419,13 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       framesRef.current = newFrames;
       setFrames([...newFrames]);
 
-      // Step 2: Scene classification (use rollouts API when finetune is configured)
+      // Step 2: Scene classification via Modal fine-tuned detector
       let completed = 0;
       const sceneTasks = newFrames.map((frame, _idx) => async () => {
         if (cancelRef.current) return;
         try {
           frame.labels.scene = parseScene(
-            await queryMoondream(
-              frame.hiResUrl,
-              SCENE_QUESTION,
-              undefined,
-              ftId ? scModel : null,
-              true,
-              ftId || undefined
-            )
+            await queryModalScene(frame.hiResUrl)
           );
         } catch {
           errors++;
@@ -557,7 +533,7 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       setStatusMessage(message);
       setAnnotateMessage("");
     }
-  }, [analyzing, videoLoaded, sceneModelName, sceneFinetuneId, sceneStep, interval]);
+  }, [analyzing, videoLoaded, interval]);
 
   const cancelAnalysis = useCallback(() => {
     cancelRef.current = true;
