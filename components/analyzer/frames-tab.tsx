@@ -9,16 +9,12 @@ export function FramesTab() {
     frames,
     selection,
     focusIdx,
-    videoLoaded,
-    analyzing,
     applyLabel,
     toggleEvent,
     clearSelectedLabels,
     goNextUnlabeled,
     setSelection,
     setFocusIdx,
-    reAnalyze,
-    runAnalysis,
     getConsensus,
     getStats,
   } = useAnalyzer();
@@ -28,8 +24,6 @@ export function FramesTab() {
 
   const consensus = getConsensus();
   const stats = getStats();
-  const hasFrames = frames.length > 0;
-
   // Preview image
   let previewSrc = "";
   if (selection.size > 0) {
@@ -320,22 +314,6 @@ export function FramesTab() {
         )}
       </section>
 
-      <div className="reanalyze-row">
-        <button
-          className="btn btn-success btn-sm"
-          disabled={!hasFrames}
-          onClick={reAnalyze}
-        >
-          Re-Analyze (no API)
-        </button>
-        <button
-          className="btn btn-warning btn-sm"
-          disabled={!videoLoaded || !hasFrames || analyzing}
-          onClick={() => runAnalysis()}
-        >
-          Re-Run Inference
-        </button>
-      </div>
     </div>
   );
 }

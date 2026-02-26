@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { deleteSessionAction } from "./actions"
+import { signout } from "./auth/actions"
+import { SessionsGrid } from "@/components/sessions-grid"
 import "./landing.css"
 
 export default async function LandingPage() {
@@ -19,17 +20,21 @@ export default async function LandingPage() {
     if (user) {
       const { data: sessionsData } = await supabase
         .from("analysis_sessions")
-        .select("id, video_name, created_at, frame_annotations")
+        .select("id, video_name, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
 
       const userId = user.id
       sessionsWithThumbs = await Promise.all(
         (sessionsData ?? []).map(async (r) => {
-          const annotations = r.frame_annotations as {
-            frames?: { timestamp: number }[]
-          } | null
-          const frameCount = annotations?.frames?.length ?? 0
+          const { data: maxFrame } = await supabase
+            .from("frames")
+            .select("frame_index")
+            .eq("session_id", r.id)
+            .order("frame_index", { ascending: false })
+            .limit(1)
+            .single()
+          const frameCount = maxFrame ? maxFrame.frame_index + 1 : 0
           const midIdx = Math.floor(frameCount / 2)
           let thumbUrl: string | null = null
           if (frameCount > 0) {
@@ -60,6 +65,7 @@ export default async function LandingPage() {
 
   return (
     <div className="landing">
+      <div className="landing-nav-sticky">
       <nav className="landing-nav" aria-label="Main navigation">
         <Link href="/" className="landing-nav-logo">
           Kart Vision
@@ -68,7 +74,18 @@ export default async function LandingPage() {
           <Link href="/how-it-works" className="landing-nav-link">
             How It Works
           </Link>
-          {!user && (
+          {user ? (
+            <>
+              <Link href="/analyzer" className="landing-nav-link">
+                Analyzer
+              </Link>
+              <form action={signout} style={{ display: "contents" }}>
+                <button type="submit" className="landing-nav-link landing-nav-link--btn">
+                  Sign Out
+                </button>
+              </form>
+            </>
+          ) : (
             <>
               <Link href="/auth/login" className="landing-nav-link">
                 Log In
@@ -80,6 +97,7 @@ export default async function LandingPage() {
           )}
         </div>
       </nav>
+      </div>
 
       <main>
         {user ? (
@@ -88,58 +106,7 @@ export default async function LandingPage() {
             <p className="landing-sessions-desc">
               Pick a session to continue or start a new analysis.
             </p>
-            <div className="landing-sessions-grid">
-              <Link
-                href="/analyzer"
-                className="landing-session-card landing-session-card--new"
-                aria-label="Add new session"
-              >
-                <span className="landing-session-card-icon" aria-hidden="true">
-                  +
-                </span>
-                <span className="landing-session-card-label">Add new</span>
-              </Link>
-              {sessionsWithThumbs.map((s) => (
-                <div key={s.id} className="landing-session-card-wrapper">
-                  <Link
-                    href={`/analyzer?session=${s.id}`}
-                    className="landing-session-card"
-                  >
-                    {s.thumbUrl ? (
-                      <img
-                        src={s.thumbUrl}
-                        className="landing-session-card-thumb"
-                        alt=""
-                      />
-                    ) : (
-                      <div className="landing-session-card-thumb landing-session-card-thumb--empty" aria-hidden="true" />
-                    )}
-                    <span className="landing-session-card-name">
-                      {s.video_name}
-                    </span>
-                    <span className="landing-session-card-date">
-                      {new Date(s.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                        timeZone: "UTC",
-                      })}
-                    </span>
-                  </Link>
-                  <form action={deleteSessionAction}>
-                    <input type="hidden" name="sessionId" value={s.id} />
-                    <button
-                      type="submit"
-                      className="landing-session-card-delete"
-                      aria-label={`Delete session ${s.video_name}`}
-                      title="Delete session"
-                    >
-                      ×
-                    </button>
-                  </form>
-                </div>
-              ))}
-            </div>
+            <SessionsGrid sessions={sessionsWithThumbs} />
           </section>
         ) : (
           <section className="landing-hero">
@@ -255,7 +222,7 @@ export default async function LandingPage() {
       </main>
 
       <footer className="landing-footer">
-        <p>Kart Vision -- built with Next.js, Supabase, and Moondream AI</p>
+        <p>Kart Vision &middot; Built with Next.js, Supabase &amp; Moondream AI</p>
       </footer>
     </div>
   )

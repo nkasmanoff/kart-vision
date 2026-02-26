@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAnalyzer } from "@/lib/analyzer-context";
 import { fmtTs, EVENT_LABELS } from "@/lib/analyzer-types";
 
-export function FrameGrid() {
+export function FrameGrid({ width, onCollapse }: { width: number; onCollapse: () => void }) {
   const {
     frames,
     selection,
@@ -136,11 +136,13 @@ export function FrameGrid() {
     return (
       <nav
         className="grid-panel"
+        style={{ width }}
         aria-label="Frame grid"
       >
         <div className="grid-header">
           <span>Frames</span>
           <b>0</b>
+          <button className="grid-collapse-btn" onClick={onCollapse} title="Collapse panel">◀</button>
         </div>
         <div className="grid-empty" role="status">
           <div className="big" aria-hidden="true">
@@ -157,11 +159,13 @@ export function FrameGrid() {
   return (
     <nav
       className="grid-panel"
+      style={{ width }}
       aria-label="Frame grid"
     >
       <div className="grid-header">
         <span>Frames</span>
         <b>{frames.length}</b>
+        <button className="grid-collapse-btn" onClick={onCollapse} title="Collapse panel">◀</button>
       </div>
       <div
         ref={containerRef}
@@ -205,6 +209,7 @@ export function FrameGrid() {
                   top,
                   left,
                   width: thumbSize,
+                  height: cellH,
                 }}
                 role="option"
                 aria-selected={isSelected}

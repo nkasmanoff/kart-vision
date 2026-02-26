@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -169,7 +170,6 @@ interface AnalyzerActions {
   loadVideo: (file: File) => void;
   runAnalysis: () => Promise<void>;
   cancelAnalysis: () => void;
-  reAnalyze: () => void;
   setSelection: (indices: number[]) => void;
   addToSelection: (indices: number[]) => void;
   toggleSelection: (idx: number) => void;
@@ -181,7 +181,6 @@ interface AnalyzerActions {
   setThumbSize: (size: number) => void;
   setInterval: (val: number) => void;
   setFocusIdx: (idx: number) => void;
-  saveToSupabase: () => Promise<void>;
   fetchSessions: () => Promise<void>;
   loadSession: (id: string) => Promise<void>;
   newSession: () => void;
@@ -238,6 +237,57 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cancelRef = useRef(false);
   const framesRef = useRef<Frame[]>([]);
+  const objectUrlRef = useRef<string | null>(null);
+
+  // Mirror refs — keep state values accessible inside debounced callbacks
+  // without stale closure issues
+  const videoNameRef = useRef(videoName);
+  useEffect(() => { videoNameRef.current = videoName; }, [videoName]);
+  const sessionIdRef = useRef<string | null>(currentSessionId);
+  useEffect(() => { sessionIdRef.current = currentSessionId; }, [currentSessionId]);
+  const racesRef = useRef<RaceData[]>(races);
+  useEffect(() => { racesRef.current = races; }, [races]);
+
+  // Debounced frame upsert — batches rapid label edits into a single DB write
+  const pendingIndicesRef = useRef<Set<number>>(new Set());
+  const upsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleFrameUpsert = useCallback((indices: number[]) => {
+    if (!sessionIdRef.current) return; // nothing to sync until session exists
+    indices.forEach((i) => pendingIndicesRef.current.add(i));
+    if (upsertTimerRef.current) clearTimeout(upsertTimerRef.current);
+    upsertTimerRef.current = setTimeout(async () => {
+      const sessionId = sessionIdRef.current;
+      if (!sessionId) return;
+      const pendingIdx = [...pendingIndicesRef.current];
+      pendingIndicesRef.current = new Set();
+      const allFrames = framesRef.current;
+      const rows = pendingIdx
+        .map((i) => {
+          const fr = allFrames[i];
+          if (!fr) return null;
+          return {
+            session_id: sessionId,
+            frame_index: i,
+            timestamp: fr.timestamp,
+            scene: fr.labels.scene,
+            position: fr.labels.position !== null ? String(fr.labels.position) : null,
+            coins: fr.labels.coins,
+            events: fr.labels.events,
+          };
+        })
+        .filter(Boolean);
+      if (rows.length === 0) return;
+      const supabase = createClient();
+      const [framesResult] = await Promise.all([
+        supabase.from("frames").upsert(rows, { onConflict: "session_id,frame_index" }),
+        supabase.from("analysis_sessions").update({ race_data: racesRef.current }).eq("id", sessionId),
+      ]);
+      if (framesResult.error) {
+        toast.error("Sync failed: " + framesResult.error.message);
+      }
+    }, 600);
+  }, []);
 
   // Keep framesRef in sync
   const updateFrames = useCallback((newFrames: Frame[]) => {
@@ -248,7 +298,11 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
   const loadVideo = useCallback(
     (file: File) => {
       if (!file || !videoRef.current) return;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
       const url = URL.createObjectURL(file);
+      objectUrlRef.current = url;
       const vid = videoRef.current;
       vid.src = url;
       vid.load();
@@ -291,17 +345,20 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     (key: keyof FrameLabels, value: unknown) => {
       if (selection.size === 0) return;
       const updated = [...framesRef.current];
+      const affected: number[] = [];
       selection.forEach((idx) => {
         if (key === "events") return;
         (updated[idx].labels as unknown as Record<string, unknown>)[key] = value;
+        affected.push(idx);
       });
       imputeScene(updated);
       const newRaces = segmentRaces(updated);
       framesRef.current = updated;
       setFrames([...updated]);
       setRaces(newRaces);
+      scheduleFrameUpsert(affected);
     },
-    [selection]
+    [selection, scheduleFrameUpsert]
   );
 
   const toggleEvent = useCallback(
@@ -331,14 +388,16 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       framesRef.current = updated;
       setFrames([...updated]);
       setRaces(newRaces);
+      scheduleFrameUpsert(selArr);
     },
-    [selection]
+    [selection, scheduleFrameUpsert]
   );
 
   const clearSelectedLabels = useCallback(() => {
     if (selection.size === 0) return;
+    const selArr = [...selection];
     const updated = [...framesRef.current];
-    selection.forEach((idx) => {
+    selArr.forEach((idx) => {
       updated[idx].labels = defaultLabels();
     });
     imputeScene(updated);
@@ -346,8 +405,9 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     framesRef.current = updated;
     setFrames([...updated]);
     setRaces(newRaces);
+    scheduleFrameUpsert(selArr);
     toast("Cleared labels for selected frames");
-  }, [selection]);
+  }, [selection, scheduleFrameUpsert]);
 
   const goNextUnlabeled = useCallback(() => {
     const f = framesRef.current;
@@ -416,6 +476,8 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setAnnotateMessage(`Extracting ${i + 1}/${totalFrames}`);
         if (i % 20 === 0) await new Promise((r) => setTimeout(r, 0));
       }
+      tc.width = 0;
+      tc.height = 0;
       framesRef.current = newFrames;
       setFrames([...newFrames]);
 
@@ -435,7 +497,9 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setAnnotateMessage(
           `Phase 1: Scene ${completed}/${newFrames.length}${errors ? ` (${errors} err)` : ""}`
         );
-        setFrames([...newFrames]);
+        if (completed % 5 === 0 || completed === newFrames.length) {
+          setFrames([...newFrames]);
+        }
       });
       await runBatch(sceneTasks, CONCURRENCY, () => cancelRef.current);
       if (cancelRef.current) {
@@ -468,7 +532,9 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setAnnotateMessage(
           `Phase 2: Position ${completed}/${raceIndices.length}${errors ? ` (${errors} err)` : ""}`
         );
-        setFrames([...newFrames]);
+        if (completed % 5 === 0 || completed === raceIndices.length) {
+          setFrames([...newFrames]);
+        }
       });
       await runBatch(posTasks, CONCURRENCY, () => cancelRef.current);
       if (cancelRef.current) {
@@ -497,7 +563,9 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setAnnotateMessage(
           `Phase 3: Coins ${completed}/${raceIndices.length}${errors ? ` (${errors} err)` : ""}`
         );
-        setFrames([...newFrames]);
+        if (completed % 5 === 0 || completed === raceIndices.length) {
+          setFrames([...newFrames]);
+        }
       });
       await runBatch(coinTasks, CONCURRENCY, () => cancelRef.current);
       if (cancelRef.current) {
@@ -518,9 +586,60 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         `${newRaces.length} race(s) from ${newFrames.length} frames${imputed ? ` (${imputed} imputed)` : ""}`
       );
       setActiveTab("dashboard");
-      toast.success(
-        `Analysis complete: ${newRaces.length} race(s) detected`
-      );
+      toast.success(`Analysis complete: ${newRaces.length} race(s) detected`);
+
+      // Step 5: Auto-save to Supabase
+      const saveToastId = toast.loading("Saving session...");
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const videoNameSaved = videoNameRef.current || "Untitled";
+          const frameRowsForSave = newFrames.map((fr, i) => ({
+            frame_index: i,
+            timestamp: fr.timestamp,
+            scene: fr.labels.scene,
+            position: fr.labels.position !== null ? String(fr.labels.position) : null,
+            coins: fr.labels.coins,
+            events: fr.labels.events,
+          }));
+
+          let savedSessionId = sessionIdRef.current;
+          if (savedSessionId) {
+            await supabase
+              .from("analysis_sessions")
+              .update({ video_name: videoNameSaved, sample_interval: intv, race_data: newRaces })
+              .eq("id", savedSessionId)
+              .eq("user_id", user.id);
+            await supabase.from("frames").delete().eq("session_id", savedSessionId);
+            await supabase.from("frames").insert(frameRowsForSave.map((r) => ({ session_id: savedSessionId!, ...r })));
+          } else {
+            const { data: sessionData, error: sessionError } = await supabase
+              .from("analysis_sessions")
+              .insert({ user_id: user.id, video_name: videoNameSaved, sample_interval: intv, race_data: newRaces })
+              .select("id")
+              .single();
+            if (sessionError) throw sessionError;
+            savedSessionId = sessionData.id;
+            await supabase.from("frames").insert(frameRowsForSave.map((r) => ({ session_id: savedSessionId!, ...r })));
+            setCurrentSessionId(savedSessionId);
+            setSessions((prev) => [
+              { id: savedSessionId!, video_name: videoNameSaved, created_at: new Date().toISOString() },
+              ...prev,
+            ]);
+          }
+
+          await uploadFrameImages(
+            supabase, user.id, savedSessionId, newFrames,
+            (done, total) => toast.loading(`Uploading images ${done}/${total}...`, { id: saveToastId })
+          );
+          toast.success("Session saved", { id: saveToastId });
+        } else {
+          toast.dismiss(saveToastId);
+        }
+      } catch (e) {
+        toast.error("Auto-save failed: " + (e as Error).message, { id: saveToastId });
+      }
     } catch (e) {
       finish("Error: " + (e as Error).message);
       toast.error("Analysis failed: " + (e as Error).message);
@@ -540,129 +659,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     toast("Analysis cancelled");
   }, []);
 
-  const reAnalyze = useCallback(() => {
-    if (framesRef.current.length === 0) return;
-    const updated = [...framesRef.current];
-    imputeScene(updated);
-    const newRaces = segmentRaces(updated);
-    framesRef.current = updated;
-    setFrames([...updated]);
-    setRaces(newRaces);
-    setStatusMessage(`${newRaces.length} race(s) after re-analysis`);
-    setActiveTab("dashboard");
-    toast.success(`Re-analysis complete: ${newRaces.length} race(s)`);
-  }, []);
-
-  const saveToSupabase = useCallback(async () => {
-    const f = framesRef.current;
-    if (f.length === 0) {
-      toast.error("No frames to save.");
-      return;
-    }
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Sign in to save to Supabase.");
-      return;
-    }
-    const frameAnnotations = {
-      type: "frame_annotations",
-      sample_interval: interval,
-      total_frames: f.length,
-      labeled_frames: f.filter((fr) => isLabeled(fr.labels)).length,
-      frames: f.map((fr) => ({
-        timestamp: fr.timestamp,
-        scene: fr.labels.scene,
-        position: fr.labels.position,
-        coins: fr.labels.coins,
-        events: fr.labels.events,
-      })),
-    };
-
-    const hasNewImages = f.some(
-      (fr) =>
-        (fr.dataUrl && fr.dataUrl.startsWith("data:")) ||
-        (fr.hiResUrl && fr.hiResUrl.startsWith("data:"))
-    );
-
-    if (currentSessionId) {
-      const { error } = await supabase
-        .from("analysis_sessions")
-        .update({
-          video_name: videoName || "Untitled",
-          sample_interval: interval,
-          frame_annotations: frameAnnotations,
-          race_data: races,
-        })
-        .eq("id", currentSessionId)
-        .eq("user_id", user.id);
-      if (error) {
-        toast.error("Failed to update: " + error.message);
-        return;
-      }
-
-      if (hasNewImages) {
-        const toastId = toast.loading("Uploading frame images...");
-        try {
-          await uploadFrameImages(
-            supabase, user.id, currentSessionId, f,
-            (done, total) => toast.loading(`Uploading images ${done}/${total}...`, { id: toastId })
-          );
-          toast.dismiss(toastId);
-        } catch (e) {
-          toast.dismiss(toastId);
-          toast.error("Failed to upload some images: " + (e as Error).message);
-        }
-      }
-
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === currentSessionId
-            ? { ...s, video_name: videoName || "Untitled" }
-            : s
-        )
-      );
-      toast.success("Session updated");
-    } else {
-      const payload = {
-        user_id: user.id,
-        video_name: videoName || "Untitled",
-        sample_interval: interval,
-        frame_annotations: frameAnnotations,
-        race_data: races,
-      };
-      const { data, error } = await supabase
-        .from("analysis_sessions")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (error) {
-        toast.error("Failed to save: " + error.message);
-        return;
-      }
-
-      if (hasNewImages) {
-        const toastId = toast.loading("Uploading frame images...");
-        try {
-          await uploadFrameImages(
-            supabase, user.id, data.id, f,
-            (done, total) => toast.loading(`Uploading images ${done}/${total}...`, { id: toastId })
-          );
-          toast.dismiss(toastId);
-        } catch (e) {
-          toast.dismiss(toastId);
-          toast.error("Failed to upload some images: " + (e as Error).message);
-        }
-      }
-
-      setCurrentSessionId(data.id);
-      setSessions((prev) => [
-        { id: data.id, video_name: payload.video_name, created_at: new Date().toISOString() },
-        ...prev,
-      ]);
-      toast.success("Session saved");
-    }
-  }, [interval, videoName, races, currentSessionId]);
 
   const fetchSessions = useCallback(async () => {
     const supabase = createClient();
@@ -692,7 +688,7 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const { data, error } = await supabase
       .from("analysis_sessions")
-      .select("video_name, sample_interval, frame_annotations, race_data")
+      .select("video_name, sample_interval, race_data")
       .eq("id", id)
       .eq("user_id", user.id)
       .single();
@@ -700,11 +696,24 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       toast.error("Failed to load session");
       return;
     }
-    const ann = data.frame_annotations as {
-      sample_interval?: number;
-      frames?: { timestamp: number; scene: string | null; position: number | string | null; coins: number | null; events: string[] }[];
-    };
-    const frameList = ann?.frames ?? [];
+
+    // Paginate through frames — PostgREST caps each response at 1000 rows
+    const PAGE_SIZE = 1000;
+    type FrameRow = { frame_index: number; timestamp: number; scene: string | null; position: string | null; coins: number | null; events: string[] };
+    const frameList: FrameRow[] = [];
+    let from = 0;
+    while (true) {
+      const { data: page, error: pageError } = await supabase
+        .from("frames")
+        .select("frame_index, timestamp, scene, position, coins, events")
+        .eq("session_id", id)
+        .order("frame_index", { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
+      if (pageError || !page || page.length === 0) break;
+      frameList.push(...(page as FrameRow[]));
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
 
     const toastId = toast.loading("Loading frame images...");
     let thumbUrls: string[] = [];
@@ -716,21 +725,19 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     } catch {
       // Images may not exist for older sessions — continue with empty URLs
     }
-    toast.dismiss(toastId);
-
-    const loadedFrames: Frame[] = frameList.map((fr, i) => {
-      const pos = fr.position;
+    const loadedFrames: Frame[] = frameList.map((fr) => {
+      const posStr = fr.position as string | null;
       const position: FrameLabels["position"] =
-        pos === "x" ? "x" : typeof pos === "number" ? pos : null;
+        posStr === "x" ? "x" : posStr !== null ? parseInt(posStr, 10) : null;
       return {
         timestamp: fr.timestamp,
-        dataUrl: thumbUrls[i] || "",
-        hiResUrl: hiResUrls[i] || "",
+        dataUrl: thumbUrls[fr.frame_index] || "",
+        hiResUrl: hiResUrls[fr.frame_index] || "",
         labels: {
           scene: fr.scene === "in_race" || fr.scene === "not_in_race" ? fr.scene : null,
           position,
           coins: fr.coins,
-          events: fr.events ?? [],
+          events: (fr.events as string[]) ?? [],
         },
       };
     });
@@ -744,7 +751,7 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     setCurrentSessionId(id);
     setStatusMessage(`Loaded: ${data.video_name || "Untitled"} (${loadedFrames.length} frames)`);
     setActiveTab("dashboard");
-    toast.success("Session loaded");
+    toast.success("Session loaded", { id: toastId });
   }, [currentSessionId]);
 
   const newSession = useCallback(() => {
@@ -761,6 +768,10 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
     setStatusMessage("No video loaded");
     setCurrentSessionId(null);
     framesRef.current = [];
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
     if (videoRef.current) {
       videoRef.current.src = "";
     }
@@ -804,6 +815,10 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
       setStatusMessage("No video loaded");
       setCurrentSessionId(null);
       framesRef.current = [];
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
       if (videoRef.current) videoRef.current.src = "";
     }
 
@@ -901,7 +916,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         loadVideo,
         runAnalysis,
         cancelAnalysis,
-        reAnalyze,
         setSelection: setSelectionAction,
         addToSelection: addToSelectionAction,
         toggleSelection: toggleSelectionAction,
@@ -913,7 +927,6 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
         setThumbSize,
         setInterval: setIntervalVal,
         setFocusIdx,
-        saveToSupabase,
         fetchSessions,
         loadSession,
         newSession,

@@ -257,7 +257,10 @@ export function getHighResDataUrl(video: HTMLVideoElement): string {
   c.width = w;
   c.height = h;
   c.getContext("2d")!.drawImage(video, 0, 0, w, h);
-  return c.toDataURL("image/jpeg", 0.85);
+  const dataUrl = c.toDataURL("image/jpeg", 0.85);
+  c.width = 0;
+  c.height = 0;
+  return dataUrl;
 }
 
 export function cropBottomRight(imageDataUrl: string): Promise<string> {
@@ -275,7 +278,10 @@ export function cropBottomRight(imageDataUrl: string): Promise<string> {
       c.width = cropW;
       c.height = cropH;
       c.getContext("2d")!.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
-      resolve(c.toDataURL("image/jpeg", 0.85));
+      const dataUrl = c.toDataURL("image/jpeg", 0.85);
+      c.width = 0;
+      c.height = 0;
+      resolve(dataUrl);
     };
     img.onerror = () => reject(new Error("Failed to load image for crop"));
     img.src = imageDataUrl;
@@ -296,7 +302,10 @@ export function cropBottomLeft(imageDataUrl: string): Promise<string> {
       c.width = cropW;
       c.height = cropH;
       c.getContext("2d")!.drawImage(img, 0, sy, cropW, cropH, 0, 0, cropW, cropH);
-      resolve(c.toDataURL("image/jpeg", 0.85));
+      const dataUrl = c.toDataURL("image/jpeg", 0.85);
+      c.width = 0;
+      c.height = 0;
+      resolve(dataUrl);
     };
     img.onerror = () => reject(new Error("Failed to load image for crop"));
     img.src = imageDataUrl;

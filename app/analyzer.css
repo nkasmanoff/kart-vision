@@ -218,6 +218,60 @@
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* ── Toolbar divider / user area ── */
+.tb-divider {
+  padding-left: 0.6rem;
+  margin-left: 0.2rem;
+  border-left: 1px solid var(--border);
+}
+.tb-user-group {
+  margin-left: auto;
+}
+
+/* ── Toolbar icon button (delete session etc.) ── */
+.tb-icon-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+  flex-shrink: 0;
+}
+.tb-icon-btn:hover {
+  color: var(--text);
+  border-color: var(--border-hi);
+}
+.tb-delete-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(233, 69, 96, 0.08);
+}
+
+/* ── Truncating status badge ── */
+.tb-status-badge {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Email label ── */
+.tb-email {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 input[type="file"].sr-only {
   position: absolute;
   width: 1px;
@@ -259,13 +313,65 @@ input[type="file"].sr-only {
 .grid-panel {
   width: 260px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border);
   overflow: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* ── Collapse / expand buttons for frame panel ── */
+.grid-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.6rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color 0.1s, background 0.1s;
+}
+.grid-collapse-btn:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.grid-expand-strip {
+  width: 20px;
+  flex-shrink: 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.55rem;
+  transition: color 0.1s, background 0.1s;
+}
+.grid-expand-strip:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+/* ── Resize handle between grid panel and right panel ── */
+.resize-handle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+  position: relative;
+}
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent);
 }
 .grid-panel::-webkit-scrollbar {
   width: 6px;
@@ -349,7 +455,7 @@ input[type="file"].sr-only {
 .frame-idx {
   font-family: monospace;
   font-size: 0.52rem;
-  color: var(--dim);
+  color: #555;
   flex-shrink: 0;
 }
 .frame-badge {
@@ -458,6 +564,128 @@ input[type="file"].sr-only {
 }
 
 /* ── Dashboard tab ── */
+
+/* Two-column grid for overview + donut */
+.dash-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+}
+@media (max-width: 860px) {
+  .dash-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Performance breakdown row */
+.perf-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.8rem;
+}
+@media (max-width: 600px) {
+  .perf-breakdown {
+    grid-template-columns: 1fr;
+  }
+}
+.perf-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  text-align: center;
+}
+.perf-card-pct {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.perf-card-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}
+.perf-card-sub {
+  font-size: 0.65rem;
+  color: var(--dim);
+  margin-top: 0.15rem;
+}
+
+/* Race badges */
+.race-card-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.race-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.race-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 100px;
+  border: 1px solid;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Positions gained / lost */
+.pos-gained {
+  color: #00c853;
+}
+.pos-lost {
+  color: #e94560;
+}
+
+/* Position tier bar */
+.pos-tier-wrap {
+  padding: 0.4rem 1rem 0.6rem;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.pos-tier-bar {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  background: var(--border);
+  margin-bottom: 0.35rem;
+}
+.pos-tier-seg {
+  height: 100%;
+  transition: width 0.3s;
+}
+.pos-tier-top3 { background: #ffd700; }
+.pos-tier-mid  { background: #4488ff; }
+.pos-tier-low  { background: rgba(233,69,96,0.55); }
+
+.pos-tier-legend {
+  display: flex;
+  gap: 0.9rem;
+}
+.pos-tier-key {
+  font-size: 0.6rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.pos-tier-key::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.pos-tier-key--top3::before { background: #ffd700; }
+.pos-tier-key--mid::before  { background: #4488ff; }
+.pos-tier-key--low::before  { background: rgba(233,69,96,0.55); }
+
 .dash-empty {
   display: flex;
   align-items: center;
@@ -531,7 +759,7 @@ input[type="file"].sr-only {
 .race-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   padding: 0.7rem 1rem;
   border-bottom: 1px solid #1e1e3a;
 }
@@ -820,10 +1048,12 @@ input[type="file"].sr-only {
   .main {
     flex-direction: column;
   }
+  .resize-handle {
+    display: none;
+  }
   .grid-panel {
-    width: 100%;
+    width: 100% !important;
     max-height: 200px;
-    border-right: none;
     border-bottom: 1px solid var(--border);
     overflow-y: auto;
   }
@@ -894,7 +1124,8 @@ input[type="file"].sr-only {
 .tab-btn:focus-visible,
 .scene-btn:focus-visible,
 .label-btn:focus-visible,
-.qs-btn:focus-visible {
+.qs-btn:focus-visible,
+.tb-icon-btn:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }

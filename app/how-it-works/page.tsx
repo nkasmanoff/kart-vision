@@ -102,7 +102,7 @@ export default function HowItWorksPage() {
               strokeLinejoin="round"
             />
           </svg>
-          Back to Analyzer
+          Home
         </Link>
         <h1 className="hiw-nav-title">Kart Vision</h1>
       </nav>
@@ -270,7 +270,7 @@ export default function HowItWorksPage() {
         <section className="hiw-cta">
           <h2 className="hiw-cta-title">Ready to analyze?</h2>
           <p className="hiw-cta-desc">
-            Load a video and hit Analyze (configure your Moondream API key in `.env`).
+            Load a video, hit Analyze, and explore your race data on the dashboard.
           </p>
           <Link href="/analyzer" className="hiw-cta-btn">
             Open Analyzer

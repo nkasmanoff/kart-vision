@@ -13,7 +13,6 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
     annotateMessage,
     interval,
     thumbSize,
-    frames,
     sessions,
     currentSessionId,
     loadVideo,
@@ -21,7 +20,6 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
     cancelAnalysis,
     setInterval,
     setThumbSize,
-    saveToSupabase,
     fetchSessions,
     loadSession,
     newSession,
@@ -33,7 +31,6 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
   }, [userEmail, fetchSessions]);
 
   const canAnalyze = videoLoaded && !analyzing;
-  const hasFrames = frames.length > 0;
 
   return (
     <header className="toolbar" role="toolbar" aria-label="Analyzer controls">
@@ -45,7 +42,7 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
         className="btn btn-secondary btn-sm"
         style={{ textDecoration: "none" }}
       >
-        How It Works
+        Docs
       </Link>
 
       {userEmail && (
@@ -59,22 +56,28 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
               else newSession();
             }}
             aria-label="Select session"
-            style={{ minWidth: 140, maxWidth: 200 }}
+            style={{ minWidth: 130, maxWidth: 190 }}
           >
-            <option value="">New session...</option>
+            <option value="">New session…</option>
             {sessions.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.video_name || "Untitled"} ({new Date(s.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })})
+                {s.video_name || "Untitled"} &middot;{" "}
+                {new Date(s.created_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  timeZone: "UTC",
+                })}
               </option>
             ))}
           </select>
           {currentSessionId && (
             <button
-              className="btn btn-danger btn-sm"
+              className="tb-icon-btn tb-delete-btn"
               onClick={() => deleteSession(currentSessionId)}
               aria-label="Delete current session"
+              title="Delete session"
             >
-              Delete Session
+              ×
             </button>
           )}
         </div>
@@ -96,9 +99,7 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
       </div>
 
       <div className="tb-group" role="group" aria-label="Frame interval">
-        <span className="tb-label" id="interval-label">
-          Every
-        </span>
+        <span className="tb-label" id="interval-label">Interval</span>
         <input
           type="number"
           className="tb-input"
@@ -109,7 +110,7 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
           aria-labelledby="interval-label"
           onChange={(e) => setInterval(parseFloat(e.target.value) || 1.0)}
         />
-        <span className="tb-label">sec</span>
+        <span className="tb-label">s</span>
       </div>
 
       <div className="tb-group" role="group" aria-label="Thumbnail size">
@@ -128,7 +129,7 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
       <div className="tb-group" role="group" aria-label="Analysis controls">
         {!analyzing ? (
           <button
-            className="btn btn-warning btn-sm"
+            className="btn btn-success btn-sm"
             disabled={!canAnalyze}
             onClick={() => runAnalysis()}
             aria-label="Start analysis"
@@ -151,45 +152,13 @@ export function Toolbar({ userEmail }: { userEmail?: string | null }) {
         )}
       </div>
 
-      <div
-        className="tb-group"
-        style={{
-          borderLeft: "1px solid var(--border)",
-          paddingLeft: "0.6rem",
-        }}
-        role="group"
-        aria-label="Session actions"
-      >
-        {userEmail && (
-          <button
-            className="btn btn-primary btn-sm"
-            disabled={!hasFrames}
-            onClick={() => saveToSupabase()}
-            aria-label={currentSessionId ? "Update session" : "Save session"}
-          >
-            {currentSessionId ? "Update Session" : "Save Session"}
-          </button>
-        )}
-      </div>
-
-      <span className="badge" role="status" aria-live="polite">
+      <span className="badge tb-status-badge" role="status" aria-live="polite">
         {statusMessage}
       </span>
 
       {userEmail && (
-        <div
-          className="tb-group"
-          style={{
-            marginLeft: "auto",
-            borderLeft: "1px solid var(--border)",
-            paddingLeft: "0.6rem",
-          }}
-          role="group"
-          aria-label="User account"
-        >
-          <span className="tb-label" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {userEmail}
-          </span>
+        <div className="tb-group tb-divider tb-user-group" role="group" aria-label="User account">
+          <span className="tb-label tb-email">{userEmail}</span>
           <form action={signout}>
             <button type="submit" className="btn btn-secondary btn-sm">
               Sign Out
