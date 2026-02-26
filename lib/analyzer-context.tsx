@@ -630,7 +630,7 @@ export function AnalyzerProvider({ children }: { children: ReactNode }) {
           }
 
           await uploadFrameImages(
-            supabase, user.id, savedSessionId, newFrames,
+            supabase, user.id, savedSessionId!, newFrames,
             (done, total) => toast.loading(`Uploading images ${done}/${total}...`, { id: saveToastId })
           );
           toast.success("Session saved", { id: saveToastId });
