@@ -25,8 +25,19 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const supabase = await createClient()
 
-  const email = formData.get("email") as string
+  const email = (formData.get("email") as string).toLowerCase().trim()
   const password = formData.get("password") as string
+
+  // Check allowlist before creating the account
+  const { data: allowed } = await supabase
+    .from("allowed_emails")
+    .select("email")
+    .eq("email", email)
+    .maybeSingle()
+
+  if (!allowed) {
+    redirect("/auth/sign-up?error=not_allowed")
+  }
 
   const { error } = await supabase.auth.signUp({
     email,

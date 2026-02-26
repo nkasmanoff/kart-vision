@@ -129,6 +129,17 @@
   color: #e8e8f0;
 }
 
+.auth-error-banner {
+  background: rgba(233, 69, 96, 0.08);
+  border: 1px solid rgba(233, 69, 96, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #e94560;
+  margin-bottom: 1.25rem;
+  line-height: 1.45;
+}
+
 .auth-footer {
   text-align: center;
   margin-top: 1.5rem;
