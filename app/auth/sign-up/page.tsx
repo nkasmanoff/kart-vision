@@ -1,14 +1,7 @@
 import Link from "next/link"
 import { signup } from "../actions"
 
-export default async function SignUpPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>
-}) {
-  const { error } = await searchParams
-  const notAllowed = error === "not_allowed"
-
+export default async function SignUpPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -21,12 +14,6 @@ export default async function SignUpPage({
             Sign up to start analyzing your races
           </p>
         </div>
-
-        {notAllowed && (
-          <div className="auth-error-banner">
-            That email isn&apos;t on the access list. Request an invite to get in.
-          </div>
-        )}
 
         <form className="auth-form">
           <div className="auth-field">
